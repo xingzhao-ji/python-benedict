@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 from benedict.dicts.io import IODict
 
 from .test_io_dict import io_dict_test_case
@@ -26,6 +28,34 @@ class io_dict_ini_test_case(io_dict_test_case):
         s = "[DEFAULT]\nflag\n[app]\nname = demo\n"
         expected = {"flag": None, "app": {"flag": None, "name": "demo"}}
         self.assertEqual(IODict.from_ini(s, allow_no_value=True), expected)
+
+    def test_from_ini_with_custom_default_section(self) -> None:
+        for section in ("DEFAULT", "global"):
+            s = f"[{section}]\nCount = 2\nFlag\n[app]\nCount = 3\n[other]\n"
+            for optionxform, count, flag in (
+                (str, "Count", "Flag"),
+                (str.upper, "COUNT", "FLAG"),
+                (None, "count", "flag"),
+            ):
+                options = {
+                    "default_section": section,
+                    "allow_no_value": True,
+                    "optionxform": optionxform,
+                }
+                expected = {
+                    count: 2,
+                    flag: None,
+                    "app": {count: 3, flag: None},
+                    "other": {count: 2, flag: None},
+                }
+                with self.subTest(section=section, optionxform=optionxform):
+                    self.assertEqual(IODict.from_ini(s, **options), expected)
+                    self.assertEqual(IODict(s, format="ini", **options), expected)
+
+    def test_from_ini_with_custom_defaults_and_default_named_section(self) -> None:
+        s = "[global]\ncount = 2\n[DEFAULT]\ncount = 99\n[app]\n"
+        expected = {"count": 2, "DEFAULT": {"count": 99}, "app": {"count": 2}}
+        self.assertEqual(IODict.from_ini(s, default_section="global"), expected)
 
     def test_from_ini_rejects_valueless_options_by_default(self) -> None:
         s = "[app]\nflag\n"
@@ -293,6 +323,53 @@ ForwardX11 = no
         d = IODict({"flag": None, "app": {"flag": None, "empty": "", "count": 2}})
         s = d.to_ini(allow_no_value=True)
         self.assertEqual(IODict.from_ini(s, allow_no_value=True), d)
+
+    def test_to_ini_with_custom_default_section(self) -> None:
+        data = {"Count": 2, "Flag": None, "app": {"Count": 3}, "other": {}}
+        original = deepcopy(data)
+        d = IODict(data)
+        for allow_no_value in (False, True):
+            for optionxform, count, flag in (
+                (str, "Count", "Flag"),
+                (str.upper, "COUNT", "FLAG"),
+                (None, "count", "flag"),
+            ):
+                options = {
+                    "default_section": "global",
+                    "allow_no_value": allow_no_value,
+                    "optionxform": optionxform,
+                }
+                original_options = options.copy()
+                flag_value = None if allow_no_value else "None"
+                expected = {
+                    count: 2,
+                    flag: flag_value,
+                    "app": {count: 3, flag: flag_value},
+                    "other": {count: 2, flag: flag_value},
+                }
+                with self.subTest(options=options):
+                    s = d.to_ini(**options)
+                    self.assertIn("[global]", s)
+                    self.assertEqual(IODict.from_ini(s, **options), expected)
+                    self.assertEqual(data, original)
+                    self.assertEqual(d, original)
+                    self.assertEqual(options, original_options)
+
+    def test_to_ini_with_custom_defaults_and_default_named_section(self) -> None:
+        for data in (
+            {"count": 2, "DEFAULT": {"count": 99}, "app": {}},
+            {"DEFAULT": {"count": 99}, "count": 2, "app": {}},
+        ):
+            original = deepcopy(data)
+            with self.subTest(data=data):
+                s = IODict(data).to_ini(default_section="global")
+                expected = {
+                    "count": 2,
+                    "DEFAULT": {"count": 99},
+                    "app": {"count": 2},
+                }
+                self.assertEqual(IODict.from_ini(s, default_section="global"), expected)
+                self.assertEqual(data, original)
 
     def test_to_ini_with_none_values_without_allow_no_value(self) -> None:
         # unchanged: without allow_no_value, None is written as a string
