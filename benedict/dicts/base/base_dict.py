@@ -83,6 +83,7 @@ class BaseDict(dict[_K, _V]):
 
     def __deepcopy__(self, memo: dict[int, Any]) -> Self:
         obj = self.__class__()
+        memo[id(self)] = obj
         # Restore subclass settings before inserting keys, so custom keypath
         # separators do not reinterpret the copied data using the defaults.
         for name, value in vars(self).items():

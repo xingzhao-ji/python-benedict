@@ -185,6 +185,14 @@ class base_dict_test_case(unittest.TestCase):
                     with self.assertRaises(AttributeError):
                         _ = copied.value
 
+    def test__deepcopy__preserves_instance_state_references(self) -> None:
+        original = BaseDict(value=1)
+        original.settings = {"owner": original, "values": [1]}
+        copied = copy.deepcopy(original)
+        self.assertIs(copied.settings["owner"], copied)
+        copied.settings["values"].append(2)
+        self.assertEqual(original.settings["values"], [1])
+
     def test__delitem__(self) -> None:
         b = BaseDict()
         with self.assertRaises(KeyError):
