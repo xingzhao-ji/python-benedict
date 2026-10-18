@@ -8,6 +8,8 @@ from types import MappingProxyType
 from typing import Any, assert_type
 
 from benedict.dicts.base import BaseDict
+from benedict.dicts.keyattr import KeyattrDict
+from benedict.dicts.keypath import KeypathDict
 
 
 class base_dict_test_case(unittest.TestCase):
@@ -151,6 +153,45 @@ class base_dict_test_case(unittest.TestCase):
         self.assertEqual(b1, b2)
         self.assertEqual(type(b1), type(b2))
         self.assertFalse(b1 is b2)
+
+    def test__deepcopy__preserves_keypath_settings(self) -> None:
+        for separator in (None, "/"):
+            with self.subTest(separator=separator):
+                original = KeypathDict(
+                    {"a.b": {"values": [1]}}, keypath_separator=separator
+                )
+                copied = copy.deepcopy(original)
+                self.assertEqual(copied, original)
+                self.assertEqual(copied.keypath_separator, separator)
+                copied["a.b"]["values"].append(2)
+                self.assertEqual(original, {"a.b": {"values": [1]}})
+
+    def test__deepcopy__preserves_keyattr_settings(self) -> None:
+        for enabled, dynamic in ((False, False), (True, True)):
+            with self.subTest(enabled=enabled, dynamic=dynamic):
+                original = KeyattrDict(
+                    {"value": 1},
+                    keyattr_enabled=enabled,
+                    keyattr_dynamic=dynamic,
+                )
+                copied = copy.deepcopy(original)
+                self.assertEqual(copied, original)
+                self.assertEqual(copied.keyattr_enabled, enabled)
+                self.assertEqual(copied.keyattr_dynamic, dynamic)
+                if enabled:
+                    self.assertEqual(copied.created, {})
+                    self.assertNotIn("created", original)
+                else:
+                    with self.assertRaises(AttributeError):
+                        _ = copied.value
+
+    def test__deepcopy__preserves_instance_state_references(self) -> None:
+        original = BaseDict(value=1)
+        original.settings = {"owner": original, "values": [1]}
+        copied = copy.deepcopy(original)
+        self.assertIs(copied.settings["owner"], copied)
+        copied.settings["values"].append(2)
+        self.assertEqual(original.settings["values"], [1])
 
     def test__delitem__(self) -> None:
         b = BaseDict()
